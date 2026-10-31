@@ -69,13 +69,25 @@ def resolve_baw_wallet(wallet_arg=None):
 def scan_baw_history_for_nfts(depth=100):
     """
     Scan transaction history from BAW CLI to identify NFT contract addresses received or minted.
+    Supports pagination via --nextCursor up to the requested depth.
     """
     contracts = {}
-    try:
-        res = subprocess.run(["baw", "wallet", "tx-history", "--size", str(depth), "--json"], capture_output=True, text=True)
-        if res.returncode == 0:
+    cursor = None
+    scanned = 0
+    page_size = min(depth, 100)
+
+    while scanned < depth:
+        cmd = ["baw", "wallet", "tx-history", "--size", str(page_size), "--json"]
+        if cursor:
+            cmd.extend(["--nextCursor", cursor])
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True)
+            if res.returncode != 0:
+                break
             data = json.loads(res.stdout)
             txs = data.get("data", {}).get("transactions", [])
+            if not txs:
+                break
             for tx in txs:
                 for sub in tx.get("txHashList", []):
                     for r in sub.get("instructions", {}).get("receive", []):
@@ -90,8 +102,14 @@ def scan_baw_history_for_nfts(depth=100):
                                 contracts[ca_cs] = {"symbol": tok.get("symbol", ""), "tokens": set()}
                             if tok.get("tokenId"):
                                 contracts[ca_cs]["tokens"].add(str(tok.get("tokenId")))
-    except Exception as e:
-        print(f"[!] Warning reading BAW tx history: {e}", file=sys.stderr)
+            scanned += len(txs)
+            has_more = data.get("data", {}).get("hasMore", False)
+            cursor = data.get("data", {}).get("nextCursor")
+            if not has_more or not cursor:
+                break
+        except Exception as e:
+            print(f"[!] Warning reading BAW tx history: {e}", file=sys.stderr)
+            break
     return contracts
 
 def fetch_element_market_metrics(api_key, chain, ca):
