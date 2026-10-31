@@ -163,7 +163,7 @@ def main():
         if not api_key:
             print("[!] Note: Running without Element API key (public rate limits apply).")
 
-    candidates = scan_baw_nft_contracts(depth=args.depth)
+    candidates = scan_baw_history_for_nfts(depth=args.depth)
     held_items = []
 
     for ca, meta in candidates.items():
